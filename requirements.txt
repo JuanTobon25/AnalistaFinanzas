@@ -13,3 +13,4 @@ langchain-openai>=0.1.6
 pypdf==5.4.0
 pytest>=7.4
 python-docx
+faiss-cpu>=1.12.0
