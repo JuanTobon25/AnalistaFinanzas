@@ -19,7 +19,7 @@ import mlflow
 
 load_dotenv()
 
-DATA_DIR = "data/pdfs"
+DATA_DIR = "data"
 PROMPT_DIR = "app/prompts"
 VECTOR_DIR = "vectorstore"
 
