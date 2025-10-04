@@ -8,51 +8,51 @@ import streamlit as st
 from app.rag_pipeline import build_chain
 from app.docx_analysis import load_interview_docx
 
-# --- Imports recomendados por LangChain Community ---
+# --- Imports recomendados por LangChain ---
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import CharacterTextSplitter
 
-# --- Configuración de la app ---
-st.set_page_config(page_title="Chatbot GenAI Psy", layout="centered")
-st.title("🤖 Asistente de Psicología - Andrés")
+st.set_page_config(page_title="Analizador de Entrevistas", layout="centered")
+st.title("📄 Analizador de entrevistas - Psicología")
 
-# --- Inicializar historial ---
-st.session_state.setdefault("chat_history", [])
+# --- Inicializar session state ---
+st.session_state.setdefault("vectorstore_loaded", False)
 
 # --- Paths ---
 ROOT = Path(__file__).parents[1]
 VECTOR_DIR = ROOT / "vectorstore"
 DATA_DIR = ROOT / "data"
+PROMPT_DIR = ROOT / "app" / "prompts"
 
-# --- Buscar PDF(s) ---
+# --- Verificar PDFs ---
 if not DATA_DIR.exists():
-    st.error("La carpeta 'data/' no existe. Coloca tus PDFs en 'data/' y reinicia.")
+    st.error("La carpeta 'data/' no existe. Coloca tus PDFs en data/ y recarga.")
     st.stop()
 
 pdf_files = [p for p in DATA_DIR.iterdir() if p.suffix.lower() == ".pdf"]
 if not pdf_files:
-    st.error("No se encontró ningún PDF en 'data/'. Agrega al menos un PDF y vuelve a intentar.")
+    st.error("No se encontró ningún PDF en data/. Agrega al menos un PDF.")
     st.stop()
 
-PDF_FILE = pdf_files[0]  # primer PDF disponible
+PDF_FILE = pdf_files[0]
 
 # --- Función para crear vectorstore desde PDF ---
 def crear_vectorstore_desde_pdf(pdf_path: Path, vector_dir: Path, chunk_size=500, chunk_overlap=50):
-    st.info(f"Creando vectorstore desde PDF: {pdf_path.name} (esto puede tardar)...")
+    st.info(f"Creando vectorstore desde PDF: {pdf_path.name}...")
     loader = PyPDFLoader(str(pdf_path))
     docs = loader.load()
 
-    text_splitter = CharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    docs = text_splitter.split_documents(docs)
+    splitter = CharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    docs = splitter.split_documents(docs)
 
     embeddings = OpenAIEmbeddings()
     vectordb = FAISS.from_documents(docs, embeddings)
 
     vector_dir.mkdir(parents=True, exist_ok=True)
     vectordb.save_local(str(vector_dir))
-    st.success("Vectorstore creado y guardado en " + str(vector_dir))
+    st.success(f"Vectorstore creado y guardado en {vector_dir}")
     return vectordb
 
 # --- Cargar o crear vectorstore ---
@@ -68,10 +68,9 @@ if not VECTOR_DIR.exists() or not index_file.exists() or not pickle_file.exists(
         st.stop()
 else:
     st.warning(
-        "Se detectó un vectorstore existente en 'vectorstore/'.\n"
-        "Cargarlo requiere deserializar un pickle. Solo hazlo si confías en el archivo."
+        "Se detectó un vectorstore existente. Cargarlo requiere deserializar un archivo pickle."
     )
-    allow = st.checkbox("Confirmo que confío en este vectorstore y deseo cargarlo")
+    allow = st.checkbox("Confío en este vectorstore y deseo cargarlo")
     if allow:
         try:
             vectordb = FAISS.load_local(
@@ -84,7 +83,7 @@ else:
             st.error("No fue posible cargar el vectorstore: " + repr(e))
             st.stop()
     else:
-        st.info("Si no deseas cargar el vectorstore, elimina la carpeta 'vectorstore/' y recarga la app.")
+        st.info("Elimina la carpeta 'vectorstore/' para regenerarlo desde el PDF.")
         st.stop()
 
 # --- Construir chain ---
@@ -94,57 +93,43 @@ except Exception as e:
     st.error("Error al construir el chain: " + repr(e))
     st.stop()
 
-# --- Chat en vivo ---
-st.header("💬 Chat en vivo")
-question = st.text_input("Escribe tu pregunta:")
-
-if question:
-    with st.spinner("Pensando..."):
-        try:
-            result = chain.invoke({"question": question, "chat_history": st.session_state.chat_history})
-            st.session_state.chat_history.append((question, result.get("answer", str(result))))
-        except Exception as e:
-            st.error("Error al invocar el chain: " + repr(e))
-
-if st.session_state.chat_history:
-    st.markdown("---")
-    for q, a in reversed(st.session_state.chat_history):
-        st.markdown(f"**🧑 Usuario:** {q}")
-        st.markdown(f"**🤖 Bot:** {a}")
-
-# --- Análisis de entrevistas DOCX ---
+# --- Cargar documento Word ---
 st.header("📄 Análisis de entrevistas (Word)")
 uploaded_file = st.file_uploader("Sube un documento Word con la entrevista", type=["docx"])
 
-prompts_dir = ROOT / "app" / "prompts"
-prompt_files = sorted([p.name for p in prompts_dir.iterdir() if p.suffix in {".txt", ".md"}]) if prompts_dir.exists() else []
+# --- Selección de prompt ---
+prompt_files = sorted([p.name for p in PROMPT_DIR.iterdir() if p.suffix in {".txt", ".md"}]) if PROMPT_DIR.exists() else []
 prompt_choice = st.selectbox("Selecciona un prompt", prompt_files)
 
 if uploaded_file and prompt_choice:
-    qa_pairs = load_interview_docx(uploaded_file)
-    st.write("Preguntas y respuestas detectadas (primeros 5 fragmentos):")
-    st.write(qa_pairs[:5])
+    try:
+        qa_pairs = load_interview_docx(uploaded_file)
+        st.write("Vista previa de los primeros 5 fragmentos de la entrevista:")
+        st.write(qa_pairs[:5])
+    except Exception as e:
+        st.error("No se pudo procesar el documento Word: " + repr(e))
+        st.stop()
 
     if st.button("🔍 Analizar entrevista"):
         with st.spinner("Analizando con IA..."):
-            joined_text = "\n".join(qa_pairs)
-            prompt_path = prompts_dir / prompt_choice
+            # Combinamos todo el texto de la entrevista
+            interview_text = "\n".join(qa_pairs)
+            prompt_path = PROMPT_DIR / prompt_choice
             try:
                 custom_prompt = prompt_path.read_text(encoding="utf-8")
             except Exception as e:
-                st.error("No se pudo leer el prompt: " + repr(e))
+                st.error("No se pudo leer el prompt seleccionado: " + repr(e))
                 custom_prompt = ""
 
-            # --- Input con llaves requeridas ---
-            input_dict = {
-                "interview_text": joined_text,
-                "categoria_analisis": custom_prompt
+            # Creamos input único para el chain
+            chain_input = {
+                "question": f"{custom_prompt}\n\nTranscripción completa de la entrevista:\n{interview_text}",
+                "chat_history": []
             }
 
             try:
-                analysis = chain.invoke(input_dict)
-                st.markdown("### 📊 Resultado del análisis")
-                st.write(analysis.get("answer", str(analysis)))
+                analysis = chain.invoke(chain_input)
+                st.markdown("### 📊 Resultado del análisis (JSON)")
+                st.json(analysis.get("answer", str(analysis)))
             except Exception as e:
-                st.error("Error al ejecutar el análisis: " + repr(e))
-
+                st.error("Error al ejecutar el análisis con el chain: " + repr(e))
