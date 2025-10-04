@@ -112,8 +112,10 @@ if uploaded_file and prompt_choice:
 
     if st.button("🔍 Analizar entrevista"):
         with st.spinner("Analizando con IA..."):
-            # Combinamos todo el texto de la entrevista
+            # Unir todos los fragmentos
             interview_text = "\n".join(qa_pairs)
+
+            # Leer prompt seleccionado
             prompt_path = PROMPT_DIR / prompt_choice
             try:
                 custom_prompt = prompt_path.read_text(encoding="utf-8")
@@ -121,10 +123,10 @@ if uploaded_file and prompt_choice:
                 st.error("No se pudo leer el prompt seleccionado: " + repr(e))
                 custom_prompt = ""
 
-            # Creamos input único para el chain
+            # --- Entrada para el chain según llaves requeridas ---
             chain_input = {
-                "question": f"{custom_prompt}\n\nTranscripción completa de la entrevista:\n{interview_text}",
-                "chat_history": []
+                "interview_text": interview_text,
+                "categoria_analisis": custom_prompt  # aquí va tu prompt que define categorías y pautas
             }
 
             try:
