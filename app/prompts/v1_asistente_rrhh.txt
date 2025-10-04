@@ -108,3 +108,4 @@ Tu tarea es analizar las transcripciones de entrevistas siguiendo estos OBJETIVO
 
 Pregunta: {question}
 Contexto: {context}
+Transcripción completa de la entrevista: {interview_text}
