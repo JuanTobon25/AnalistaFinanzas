@@ -2,5 +2,4 @@ Responde de forma breve y directa usando solo información verificada en los doc
 
 Si la respuesta no está clara, responde "No tengo información suficiente".
 
-Pregunta: {question}
 Contexto: {context}
