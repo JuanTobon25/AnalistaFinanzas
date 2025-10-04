@@ -106,6 +106,5 @@ Tu tarea es analizar las transcripciones de entrevistas siguiendo estos OBJETIVO
 - El razonamiento paso a paso debe ir antes de cualquier análisis, interpretación o conclusión.  
 - Usa JSON estructurado en la salida, nunca en bloques de código.
 
-Pregunta: {question}
 Contexto: {context}
 Transcripción completa de la entrevista: {interview_text}
